@@ -3,262 +3,183 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Eyesightworks Admin Portal</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Admin</title>
 
 <style>
 body{
 margin:0;
-font-family:'Inter',sans-serif;
+font-family:sans-serif;
 background:#0f172a;
 color:#fff;
 display:flex;
 align-items:center;
 justify-content:center;
 min-height:100vh;
-padding:20px;
 }
-
 .card{
 background:#1e293b;
-padding:40px;
-border-radius:16px;
-width:520px;
-max-width:100%;
-box-shadow:0 20px 50px rgba(0,0,0,0.4);
+padding:30px;
+border-radius:12px;
+width:500px;
 }
-
-h1{margin-bottom:10px;}
-.subtitle{color:#94a3b8;margin-bottom:25px;}
-
-input,select{
+input,select,button{
 width:100%;
-padding:12px;
-margin-bottom:15px;
-border-radius:8px;
-border:none;
-background:#334155;
-color:white;
-}
-
-button{
-width:100%;
-padding:12px;
-border:none;
-border-radius:8px;
-background:#3b82f6;
-color:white;
-font-weight:600;
-cursor:pointer;
+padding:10px;
 margin-bottom:10px;
+border-radius:6px;
+border:none;
 }
-
-button:hover{background:#2563eb;}
+button{background:#3b82f6;color:#fff;}
 .logout{background:#ef4444;}
-.logout:hover{background:#dc2626;}
-
-.dashboard{display:none;}
-
-.preview{
-margin-top:15px;
-max-width:100%;
-border-radius:10px;
-display:none;
-}
-
-.status{
-font-size:13px;
-color:#94a3b8;
-min-height:18px;
-}
+.preview{max-width:100%;display:none;}
+.status{font-size:13px;color:#94a3b8;}
 </style>
 </head>
+
 <body>
 
 <div class="card">
 
-<!-- LOGIN -->
 <div id="loginSection">
-<h1>Eyesightworks</h1>
-<div class="subtitle">Admin Access Only</div>
-
-<input type="email" id="email" placeholder="Admin Email">
-<input type="password" id="password" placeholder="Password">
-
+<h2>Login</h2>
+<input type="email" id="emailInput" placeholder="Email">
+<input type="password" id="passwordInput" placeholder="Password">
 <button onclick="login()">Login</button>
 </div>
 
-<!-- DASHBOARD -->
-<div id="dashboard" class="dashboard">
-
-<h1>Admin Dashboard</h1>
-<div class="subtitle">Upload & Connect Images</div>
+<div id="dashboard" style="display:none;">
+<h2>Upload Image</h2>
 
 <select id="contentType" onchange="loadItems()">
-<option value="">Select Content Type</option>
-<option value="vehicles">Vehicles</option>
+<option value="">Select Type</option>
 <option value="properties">Properties</option>
+<option value="vehicles">Vehicles</option>
 <option value="products">Products</option>
 </select>
 
-<select id="itemSelect">
-<option value="">Select Item</option>
-</select>
+<select id="itemSelect"></select>
 
-<input type="file" id="imageInput" accept="image/*">
-<button onclick="uploadImage()">Upload & Connect</button>
+<input type="file" id="imageInput">
 
-<div class="status" id="uploadStatus"></div>
+<button onclick="uploadImage()">Upload</button>
+
+<div class="status" id="status"></div>
 <img id="preview" class="preview">
 
 <button class="logout" onclick="logout()">Logout</button>
-
 </div>
+
 </div>
 
 <script>
 
 const API = "https://pharmacy-auto-realestate-backend.onrender.com/api";
 
-// ================= TOKEN =================
+// TOKEN
 function saveToken(t){localStorage.setItem("token",t);}
 function getToken(){return localStorage.getItem("token");}
-function clearToken(){localStorage.removeItem("token");}
-function logout(){clearToken();location.reload();}
+function logout(){localStorage.removeItem("token");location.reload();}
 
-// ================= LOGIN =================
+// LOGIN
 async function login(){
 
-const email=document.getElementById("email").value.trim();
-const password=document.getElementById("password").value.trim();
+const email=document.getElementById("emailInput").value;
+const password=document.getElementById("passwordInput").value;
 
-if(!email || !password){
-alert("Enter email and password");
-return;
-}
-
-try{
 const res=await fetch(API+"/auth/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({email,password})
 });
 
-if(!res.ok) throw new Error();
-
 const data=await res.json();
+console.log("LOGIN:", data);
 
-if(!data.access_token) throw new Error();
-
+if(data.access_token){
 saveToken(data.access_token);
-showDashboard();
-
-}catch{
-alert("Login failed.");
+dashboard.style.display="block";
+loginSection.style.display="none";
+}else{
+alert("Login failed");
 }
 }
 
-function parseJwt(token){
-try{
-return JSON.parse(atob(token.split(".")[1]));
-}catch{
-return null;
-}
-}
-
-function showDashboard(){
-const token=getToken();
-if(!token) return;
-
-const payload=parseJwt(token);
-
-if(!payload || payload.role!=="ADMIN"){
-alert("Admin only.");
-logout();
-return;
-}
-
-document.getElementById("loginSection").style.display="none";
-document.getElementById("dashboard").style.display="block";
-}
-
-if(getToken()) showDashboard();
-
-// ================= LOAD ITEMS =================
+// LOAD ITEMS
 async function loadItems(){
 
 const type=document.getElementById("contentType").value;
-const select=document.getElementById("itemSelect");
 
-if(!type) return;
-
-select.innerHTML="<option>Loading...</option>";
-
-try{
-const res=await fetch(API+"/"+type);
-const data=await res.json();
-
-select.innerHTML="<option value=''>Select Item</option>";
-
-data.forEach(item=>{
-let label=item.title || item.brand || item.name;
-select.innerHTML+=`<option value="${item.id}">${label}</option>`;
+const res=await fetch(API+"/"+type,{
+headers:{Authorization:"Bearer "+getToken()}
 });
-}catch{
-select.innerHTML="<option>Error loading</option>";
-}
+
+console.log("STATUS:", res.status);
+
+const data=await res.json();
+console.log("DATA:", data);
+
+const select=document.getElementById("itemSelect");
+select.innerHTML="";
+
+data.forEach(i=>{
+select.innerHTML+=`<option value="${i.id}">${i.title || i.name}</option>`;
+});
 }
 
-// ================= UPLOAD =================
+// UPLOAD
 async function uploadImage(){
 
 const file=document.getElementById("imageInput").files[0];
 const type=document.getElementById("contentType").value;
-const itemId=document.getElementById("itemSelect").value;
-const status=document.getElementById("uploadStatus");
+const id=document.getElementById("itemSelect").value;
 
-if(!file || !type || !itemId){
-alert("Complete all fields");
+if(!file || !type || !id){
+alert("Fill everything");
 return;
 }
 
 try{
 
-status.innerText="Requesting signature...";
+status.innerText="Getting signature...";
 
+// ✅ FIXED (IMPORTANT)
 const signRes=await fetch(API+"/cloudinary/sign",{
 method:"POST",
-headers:{Authorization:"Bearer "+getToken()}
+headers:{
+"Content-Type":"application/json",
+Authorization:"Bearer "+getToken()
+},
+body:JSON.stringify({
+public_id: "img_" + Date.now()
+})
 });
 
-if(!signRes.ok) throw new Error();
-
 const signData=await signRes.json();
+console.log("SIGN:", signData);
 
-status.innerText="Uploading to Cloudinary...";
+status.innerText="Uploading...";
 
-const formData=new FormData();
-formData.append("file",file);
-formData.append("api_key",signData.api_key);
-formData.append("timestamp",signData.timestamp);
-formData.append("signature",signData.signature);
+const fd=new FormData();
+fd.append("file",file);
+fd.append("api_key",signData.api_key);
+fd.append("timestamp",signData.timestamp);
+fd.append("signature",signData.signature);
 
 const uploadRes=await fetch(
 `https://api.cloudinary.com/v1_1/${signData.cloud_name}/image/upload`,
-{
-method:"POST",
-body:formData
-}
+{method:"POST",body:fd}
 );
 
-if(!uploadRes.ok) throw new Error();
-
 const uploadData=await uploadRes.json();
+console.log("CLOUDINARY:", uploadData);
 
-status.innerText="Saving to database...";
+if(!uploadData.secure_url){
+throw new Error("Cloudinary failed");
+}
 
-const saveRes = await fetch(API+"/"+type+"/"+itemId,{
+status.innerText="Saving...";
+
+const saveRes=await fetch(API+"/"+type+"/"+id,{
 method:"PATCH",
 headers:{
 "Content-Type":"application/json",
@@ -270,25 +191,20 @@ public_id: uploadData.public_id
 })
 });
 
-if(!saveRes.ok) throw new Error();
+const saveData=await saveRes.json();
+console.log("SAVE:", saveData);
 
-status.innerText="Upload successful!";
-displayImage(uploadData.secure_url);
+status.innerText="Done!";
+preview.src=uploadData.secure_url;
+preview.style.display="block";
 
-}catch{
-status.innerText="Upload failed.";
+}catch(err){
+console.error(err);
+status.innerText="Error occurred";
 }
-
-}
-
-// ================= DISPLAY =================
-function displayImage(url){
-const optimized=url.replace("/upload/","/upload/w_800,q_auto,f_auto/");
-const img=document.getElementById("preview");
-img.src=optimized;
-img.style.display="block";
 }
 
 </script>
+
 </body>
 </html>
