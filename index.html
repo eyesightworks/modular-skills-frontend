@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Admin</title>
+<title>Admin Upload</title>
 
 <style>
 body{
@@ -29,9 +29,9 @@ margin-bottom:10px;
 border-radius:6px;
 border:none;
 }
-button{background:#3b82f6;color:#fff;}
+button{background:#3b82f6;color:#fff;cursor:pointer;}
 .logout{background:#ef4444;}
-.preview{max-width:100%;display:none;}
+.preview{max-width:100%;display:none;margin-top:10px;}
 .status{font-size:13px;color:#94a3b8;}
 </style>
 </head>
@@ -82,10 +82,10 @@ function logout(){localStorage.removeItem("token");location.reload();}
 
 // LOGIN
 async function login(){
-
 const email=document.getElementById("emailInput").value;
 const password=document.getElementById("passwordInput").value;
 
+try{
 const res=await fetch(API+"/auth/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
@@ -93,7 +93,6 @@ body:JSON.stringify({email,password})
 });
 
 const data=await res.json();
-console.log("LOGIN:", data);
 
 if(data.access_token){
 saveToken(data.access_token);
@@ -102,36 +101,44 @@ loginSection.style.display="none";
 }else{
 alert("Login failed");
 }
+}catch(err){
+console.error(err);
+alert("Login error");
+}
 }
 
 // LOAD ITEMS
 async function loadItems(){
-
 const type=document.getElementById("contentType").value;
 
+try{
 const res=await fetch(API+"/"+type,{
 headers:{Authorization:"Bearer "+getToken()}
 });
 
-console.log("STATUS:", res.status);
-
 const data=await res.json();
-console.log("DATA:", data);
 
 const select=document.getElementById("itemSelect");
 select.innerHTML="";
 
+// ✅ ALWAYS USE title
 data.forEach(i=>{
-select.innerHTML+=`<option value="${i.id}">${i.title || i.name}</option>`;
+const label = i.title || "Untitled";
+select.innerHTML+=`<option value="${i.id}">${label}</option>`;
 });
+
+}catch(err){
+console.error(err);
+}
 }
 
-// UPLOAD
+// UPLOAD IMAGE
 async function uploadImage(){
 
 const file=document.getElementById("imageInput").files[0];
 const type=document.getElementById("contentType").value;
 const id=document.getElementById("itemSelect").value;
+const status=document.getElementById("status");
 
 if(!file || !type || !id){
 alert("Fill everything");
@@ -142,7 +149,7 @@ try{
 
 status.innerText="Getting signature...";
 
-// ✅ FIXED (IMPORTANT)
+// 1️⃣ GET SIGNATURE
 const signRes=await fetch(API+"/cloudinary/sign",{
 method:"POST",
 headers:{
@@ -155,15 +162,21 @@ public_id: "img_" + Date.now()
 });
 
 const signData=await signRes.json();
-console.log("SIGN:", signData);
+
+if(!signData.api_key){
+throw new Error("Backend config error");
+}
 
 status.innerText="Uploading...";
 
+// 2️⃣ CLOUDINARY UPLOAD
 const fd=new FormData();
 fd.append("file",file);
 fd.append("api_key",signData.api_key);
 fd.append("timestamp",signData.timestamp);
 fd.append("signature",signData.signature);
+fd.append("folder",signData.folder);
+fd.append("public_id",signData.public_id); // ✅ FIXED
 
 const uploadRes=await fetch(
 `https://api.cloudinary.com/v1_1/${signData.cloud_name}/image/upload`,
@@ -171,14 +184,15 @@ const uploadRes=await fetch(
 );
 
 const uploadData=await uploadRes.json();
-console.log("CLOUDINARY:", uploadData);
 
 if(!uploadData.secure_url){
+console.error(uploadData);
 throw new Error("Cloudinary failed");
 }
 
 status.innerText="Saving...";
 
+// 3️⃣ SAVE TO DATABASE
 const saveRes=await fetch(API+"/"+type+"/"+id,{
 method:"PATCH",
 headers:{
@@ -191,8 +205,9 @@ public_id: uploadData.public_id
 })
 });
 
-const saveData=await saveRes.json();
-console.log("SAVE:", saveData);
+if(!saveRes.ok){
+throw new Error("Database save failed");
+}
 
 status.innerText="Done!";
 preview.src=uploadData.secure_url;
@@ -200,7 +215,7 @@ preview.style.display="block";
 
 }catch(err){
 console.error(err);
-status.innerText="Error occurred";
+status.innerText="❌ " + err.message;
 }
 }
 
