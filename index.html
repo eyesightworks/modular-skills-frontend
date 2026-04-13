@@ -1,8 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Upload</title>
+
+<style>
+body{
+margin:0;
+font-family:sans-serif;
+background:#0f172a;
+color:#fff;
+display:flex;
+align-items:center;
+justify-content:center;
+min-height:100vh;
+}
+.card{
+background:#1e293b;
+padding:30px;
+border-radius:12px;
+width:400px;
+}
+input,select,button{
+width:100%;
+padding:10px;
+margin-bottom:10px;
+border-radius:6px;
+border:none;
+}
+button{background:#3b82f6;color:#fff;cursor:pointer;}
+.logout{background:#ef4444;}
+.preview{max-width:100%;display:none;margin-top:10px;}
+.status{font-size:13px;color:#94a3b8;}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<div id="loginSection">
+<h2>Login</h2>
+<input type="email" id="emailInput" placeholder="Email">
+<input type="password" id="passwordInput" placeholder="Password">
+<button onclick="login()">Login</button>
+</div>
+
+<div id="dashboard" style="display:none;">
+<h2>Upload Image</h2>
+
+<select id="contentType" onchange="loadItems()">
+<option value="">Select Type</option>
+<option value="properties">Properties</option>
+<option value="vehicles">Vehicles</option>
+<option value="products">Products</option>
+</select>
+
+<select id="itemSelect"></select>
+
+<input type="file" id="imageInput">
+
+<button onclick="uploadImage()">Upload</button>
+
+<div class="status" id="status"></div>
+<img id="preview" class="preview">
+
+<button class="logout" onclick="logout()">Logout</button>
+</div>
+
+</div>
+
 <script>
 
 const API = "https://pharmacy-auto-realestate-backend.onrender.com/api";
 
-// TOKEN
 function saveToken(t){localStorage.setItem("token",t);}
 function getToken(){return localStorage.getItem("token");}
 function logout(){localStorage.removeItem("token");location.reload();}
@@ -12,7 +84,6 @@ async function login(){
 const email=document.getElementById("emailInput").value;
 const password=document.getElementById("passwordInput").value;
 
-try{
 const res=await fetch(API+"/auth/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
@@ -20,18 +91,13 @@ body:JSON.stringify({email,password})
 });
 
 const data=await res.json();
-console.log("LOGIN:", data);
 
 if(data.access_token){
 saveToken(data.access_token);
-dashboard.style.display="block";
-loginSection.style.display="none";
+document.getElementById("dashboard").style.display="block";
+document.getElementById("loginSection").style.display="none";
 }else{
 alert("Login failed");
-}
-}catch(err){
-console.error(err);
-alert("Login error");
 }
 }
 
@@ -39,16 +105,9 @@ alert("Login error");
 async function loadItems(){
 const type=document.getElementById("contentType").value;
 
-try{
 const res=await fetch(API+"/"+type,{
 headers:{Authorization:"Bearer "+getToken()}
 });
-
-if(!res.ok){
-console.error("LOAD ERROR:", await res.text());
-alert("Failed to load items");
-return;
-}
 
 const data=await res.json();
 
@@ -59,10 +118,6 @@ data.forEach(i=>{
 const label = i.title || i.name || i.brand || "Untitled";
 select.innerHTML += `<option value="${i.id}">${label}</option>`;
 });
-
-}catch(err){
-console.error(err);
-}
 }
 
 // UPLOAD IMAGE
@@ -83,7 +138,6 @@ try{
 
 status.innerText="Getting signature...";
 
-// 1️⃣ GET SIGNATURE
 const signRes=await fetch(API+"/cloudinary/sign",{
 method:"POST",
 headers:{
@@ -95,16 +149,10 @@ public_id: "img_" + Date.now()
 })
 });
 
-const signData = await signRes.json();
-console.log("SIGN:", signData);
-
-if(!signData.api_key){
-throw new Error("Signature failed");
-}
+const signData=await signRes.json();
 
 status.innerText="Uploading...";
 
-// 2️⃣ CLOUDINARY
 const fd=new FormData();
 fd.append("file",file);
 fd.append("api_key",signData.api_key);
@@ -119,7 +167,6 @@ const uploadRes=await fetch(
 );
 
 const uploadData=await uploadRes.json();
-console.log("CLOUDINARY:", uploadData);
 
 if(!uploadData.secure_url){
 throw new Error("Cloudinary failed");
@@ -127,7 +174,6 @@ throw new Error("Cloudinary failed");
 
 status.innerText="Saving...";
 
-// 3️⃣ SAVE TO DB (ONLY imageUrl ✅)
 const saveRes=await fetch(API+"/"+type+"/"+id,{
 method:"PATCH",
 headers:{
@@ -140,8 +186,6 @@ imageUrl: uploadData.secure_url
 });
 
 if(!saveRes.ok){
-const err = await saveRes.text();
-console.error("SAVE ERROR:", err);
 throw new Error("Database save failed");
 }
 
@@ -150,9 +194,11 @@ preview.src=uploadData.secure_url;
 preview.style.display="block";
 
 }catch(err){
-console.error(err);
 status.innerText="❌ " + err.message;
 }
 }
 
 </script>
+
+</body>
+</html>
