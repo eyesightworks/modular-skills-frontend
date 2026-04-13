@@ -1,76 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Admin Upload</title>
-
-<style>
-body{
-margin:0;
-font-family:sans-serif;
-background:#0f172a;
-color:#fff;
-display:flex;
-align-items:center;
-justify-content:center;
-min-height:100vh;
-}
-.card{
-background:#1e293b;
-padding:30px;
-border-radius:12px;
-width:500px;
-}
-input,select,button{
-width:100%;
-padding:10px;
-margin-bottom:10px;
-border-radius:6px;
-border:none;
-}
-button{background:#3b82f6;color:#fff;cursor:pointer;}
-.logout{background:#ef4444;}
-.preview{max-width:100%;display:none;margin-top:10px;}
-.status{font-size:13px;color:#94a3b8;}
-</style>
-</head>
-
-<body>
-
-<div class="card">
-
-<div id="loginSection">
-<h2>Login</h2>
-<input type="email" id="emailInput" placeholder="Email">
-<input type="password" id="passwordInput" placeholder="Password">
-<button onclick="login()">Login</button>
-</div>
-
-<div id="dashboard" style="display:none;">
-<h2>Upload Image</h2>
-
-<select id="contentType" onchange="loadItems()">
-<option value="">Select Type</option>
-<option value="properties">Properties</option>
-<option value="vehicles">Vehicles</option>
-<option value="products">Products</option>
-</select>
-
-<select id="itemSelect"></select>
-
-<input type="file" id="imageInput">
-
-<button onclick="uploadImage()">Upload</button>
-
-<div class="status" id="status"></div>
-<img id="preview" class="preview">
-
-<button class="logout" onclick="logout()">Logout</button>
-</div>
-
-</div>
-
 <script>
 
 const API = "https://pharmacy-auto-realestate-backend.onrender.com/api";
@@ -93,6 +20,7 @@ body:JSON.stringify({email,password})
 });
 
 const data=await res.json();
+console.log("LOGIN:", data);
 
 if(data.access_token){
 saveToken(data.access_token);
@@ -116,15 +44,20 @@ const res=await fetch(API+"/"+type,{
 headers:{Authorization:"Bearer "+getToken()}
 });
 
+if(!res.ok){
+console.error("LOAD ERROR:", await res.text());
+alert("Failed to load items");
+return;
+}
+
 const data=await res.json();
 
 const select=document.getElementById("itemSelect");
 select.innerHTML="";
 
-// ✅ ALWAYS USE title
 data.forEach(i=>{
-const label = i.title || "Untitled";
-select.innerHTML+=`<option value="${i.id}">${label}</option>`;
+const label = i.title || i.name || i.brand || "Untitled";
+select.innerHTML += `<option value="${i.id}">${label}</option>`;
 });
 
 }catch(err){
@@ -139,6 +72,7 @@ const file=document.getElementById("imageInput").files[0];
 const type=document.getElementById("contentType").value;
 const id=document.getElementById("itemSelect").value;
 const status=document.getElementById("status");
+const preview=document.getElementById("preview");
 
 if(!file || !type || !id){
 alert("Fill everything");
@@ -161,22 +95,23 @@ public_id: "img_" + Date.now()
 })
 });
 
-const signData=await signRes.json();
+const signData = await signRes.json();
+console.log("SIGN:", signData);
 
 if(!signData.api_key){
-throw new Error("Backend config error");
+throw new Error("Signature failed");
 }
 
 status.innerText="Uploading...";
 
-// 2️⃣ CLOUDINARY UPLOAD
+// 2️⃣ CLOUDINARY
 const fd=new FormData();
 fd.append("file",file);
 fd.append("api_key",signData.api_key);
 fd.append("timestamp",signData.timestamp);
 fd.append("signature",signData.signature);
 fd.append("folder",signData.folder);
-fd.append("public_id",signData.public_id); // ✅ FIXED
+fd.append("public_id",signData.public_id);
 
 const uploadRes=await fetch(
 `https://api.cloudinary.com/v1_1/${signData.cloud_name}/image/upload`,
@@ -184,15 +119,15 @@ const uploadRes=await fetch(
 );
 
 const uploadData=await uploadRes.json();
+console.log("CLOUDINARY:", uploadData);
 
 if(!uploadData.secure_url){
-console.error(uploadData);
 throw new Error("Cloudinary failed");
 }
 
 status.innerText="Saving...";
 
-// 3️⃣ SAVE TO DATABASE
+// 3️⃣ SAVE TO DB (ONLY imageUrl ✅)
 const saveRes=await fetch(API+"/"+type+"/"+id,{
 method:"PATCH",
 headers:{
@@ -200,12 +135,13 @@ headers:{
 Authorization:"Bearer "+getToken()
 },
 body:JSON.stringify({
-imageUrl: uploadData.secure_url,
-public_id: uploadData.public_id
+imageUrl: uploadData.secure_url
 })
 });
 
 if(!saveRes.ok){
+const err = await saveRes.text();
+console.error("SAVE ERROR:", err);
 throw new Error("Database save failed");
 }
 
@@ -220,6 +156,3 @@ status.innerText="❌ " + err.message;
 }
 
 </script>
-
-</body>
-</html>
