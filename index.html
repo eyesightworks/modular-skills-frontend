@@ -75,6 +75,7 @@ button{background:#3b82f6;color:#fff;cursor:pointer;}
 
 const API = "https://pharmacy-auto-realestate-backend.onrender.com/api";
 
+// TOKEN
 function saveToken(t){localStorage.setItem("token",t);}
 function getToken(){return localStorage.getItem("token");}
 function logout(){localStorage.removeItem("token");location.reload();}
@@ -84,6 +85,7 @@ async function login(){
 const email=document.getElementById("emailInput").value;
 const password=document.getElementById("passwordInput").value;
 
+try{
 const res=await fetch(API+"/auth/login",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
@@ -91,13 +93,17 @@ body:JSON.stringify({email,password})
 });
 
 const data=await res.json();
+console.log("LOGIN:", data);
 
 if(data.access_token){
 saveToken(data.access_token);
 document.getElementById("dashboard").style.display="block";
 document.getElementById("loginSection").style.display="none";
 }else{
-alert("Login failed");
+alert(data.message || "Login failed");
+}
+}catch(err){
+alert("Login error");
 }
 }
 
@@ -105,11 +111,13 @@ alert("Login failed");
 async function loadItems(){
 const type=document.getElementById("contentType").value;
 
+try{
 const res=await fetch(API+"/"+type,{
 headers:{Authorization:"Bearer "+getToken()}
 });
 
 const data=await res.json();
+console.log("ITEMS:", data);
 
 const select=document.getElementById("itemSelect");
 select.innerHTML="";
@@ -118,6 +126,10 @@ data.forEach(i=>{
 const label = i.title || i.name || i.brand || "Untitled";
 select.innerHTML += `<option value="${i.id}">${label}</option>`;
 });
+
+}catch(err){
+console.log("LOAD ERROR:", err);
+}
 }
 
 // UPLOAD IMAGE
@@ -138,6 +150,7 @@ try{
 
 status.innerText="Getting signature...";
 
+// GET SIGNATURE
 const signRes=await fetch(API+"/cloudinary/sign",{
 method:"POST",
 headers:{
@@ -150,9 +163,11 @@ public_id: "img_" + Date.now()
 });
 
 const signData=await signRes.json();
+console.log("SIGN:", signData);
 
 status.innerText="Uploading...";
 
+// UPLOAD TO CLOUDINARY
 const fd=new FormData();
 fd.append("file",file);
 fd.append("api_key",signData.api_key);
@@ -167,13 +182,15 @@ const uploadRes=await fetch(
 );
 
 const uploadData=await uploadRes.json();
+console.log("UPLOAD:", uploadData);
 
 if(!uploadData.secure_url){
-throw new Error("Cloudinary failed");
+throw new Error("Cloudinary upload failed");
 }
 
-status.innerText="Saving...";
+status.innerText="Saving to database...";
 
+// SAVE TO BACKEND (IMPORTANT: NO public_id)
 const saveRes=await fetch(API+"/"+type+"/"+id,{
 method:"PATCH",
 headers:{
@@ -185,15 +202,20 @@ imageUrl: uploadData.secure_url
 })
 });
 
+// 🔥 SHOW REAL ERROR
+const saveData = await saveRes.json();
+console.log("SAVE RESPONSE:", saveData);
+
 if(!saveRes.ok){
-throw new Error("Database save failed");
+throw new Error(saveData.message || "Database save failed");
 }
 
-status.innerText="Done!";
+status.innerText="✅ Done!";
 preview.src=uploadData.secure_url;
 preview.style.display="block";
 
 }catch(err){
+console.error("UPLOAD ERROR:", err);
 status.innerText="❌ " + err.message;
 }
 }
